@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTV:CAC & Payback Period Forecaster</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome CDN for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            900: '#0b132b',
+                            800: '#1c2541',
+                            700: '#2a3a5e',
+                        },
+                        cyan: {
+                            accent: '#00f5d4',
+                            glow: '#48cae4',
+                            muted: '#00b4d8'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0b132b;
+            color: #f1f5f9;
+            font-family: 'Inter', sans-serif;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 245, 212, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(72, 202, 228, 0.05) 0%, transparent 40%);
+        }
+
+        /* Glassmorphism Styling */
+        .glass-card {
+            background: rgba(28, 37, 65, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .glass-input {
+            background: rgba(11, 19, 43, 0.7);
+            border: 1px solid rgba(72, 202, 228, 0.25);
+            color: #00f5d4;
+            transition: all 0.2s ease;
+        }
+
+        .glass-input:focus {
+            outline: none;
+            border-color: #00f5d4;
+            box-shadow: 0 0 10px rgba(0, 245, 212, 0.3);
+        }
+
+        /* Custom Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #2a3a5e;
+            border-radius: 3px;
+            border: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #00f5d4;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(0, 245, 212, 0.8);
+            transition: transform 0.1s ease;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b132b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a3a5e;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f5d4;
+        }
+
+        /* Number Spinner Cleanup */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-cyan-accent selection:text-navy-900">
+
+    <!-- Header Section -->
+    <header class="border-b border-white/10 bg-navy-900/80 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-accent to-cyan-muted flex items-center justify-center text-navy-900 font-bold text-xl shadow-lg shadow-cyan-accent/20">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white tracking-wide flex items-center gap-2">
+                        LTV:CAC & Payback Period Forecaster
+                    </h1>
+                    <p class="text-xs text-gray-400">Unit Economics & Financial Cohort Analysis Engine</p>
+                </div>
+            </div>
+
+            <!-- Header Quick Controls -->
+            <div class="flex items-center space-x-3">
+                <button id="pin-baseline-btn" onclick="togglePinBaseline()" class="px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider bg-navy-800 hover:bg-navy-700 border border-cyan-glow/30 text-cyan-accent transition-all duration-200 flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-thumbtack"></i>
+                    <span id="pin-btn-text">Pin Baseline Scenario</span>
+                </button>
+                <button onclick="resetDefaults()" class="p-2 rounded-lg bg-navy-800 hover:bg-navy-700 text-gray-400 hover:text-white border border-white/10 transition" title="Reset Inputs">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- Heuristic Flags / Insights Banner -->
+        <div id="heuristics-container" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Dynamic Health Cards Inject Here -->
+        </div>
+
+        <!-- Top Section: Grid with Inputs on Left, Key Metrics on Right -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            <!-- Inputs Panel (5 Cols) -->
+            <div class="lg:col-span-5 space-y-6">
+                <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-accent via-cyan-glow to-blue-500"></div>
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-cyan-accent"></i> Input Model Assumptions
+                        </h2>
+                        <span class="text-xs text-gray-400">Exact inputs enabled</span>
+                    </div>
+
+                    <div class="space-y-5">
+
+                        <!-- Input 1: Average Order Value (AOV) -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="aov-input" class="text-xs font-medium text-gray-300">Average Order Value (AOV)</label>
+                                <div class="flex items-center gap-1 bg-navy-900/60 px-2 py-1 rounded border border-white/10">
+                                    <span class="text-xs text-gray-400">$</span>
+                                    <input type="number" id="aov-input" step="0.01" min="1" max="5000" class="glass-input text-xs font-bold rounded px-2 py-0.5 w-20 text-right" oninput="syncFromNumber('aov')">
+                                </div>
+                            </div>
+                            <input type="range" id="aov-slider" min="5" max="1000" step="1" class="w-full" oninput="syncFromSlider('aov')">
+                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                                <span>$5</span>
+                                <span>$1,000</span>
+                            </div>
+                        </div>
+
+                        <!-- Input 2: Purchase Frequency per Year -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="freq-input" class="text-xs font-medium text-gray-300">Purchase Frequency (Per Year)</label>
+                                <div class="flex items-center gap-1 bg-navy-900/60 px-2 py-1 rounded border border-white/10">
+                                    <input type="number" id="freq-input" step="0.1" min="0.1" max="50" class="glass-input text-xs font-bold rounded px-2 py-0.5 w-20 text-right" oninput="syncFromNumber('freq')">
+                                    <span class="text-xs text-gray-400">x/yr</span>
+                                </div>
+                            </div>
+                            <input type="range" id="freq-slider" min="0.5" max="24" step="0.1" class="w-full" oninput="syncFromSlider('freq')">
+                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                                <span>0.5x</span>
+                                <span>24x</span>
+                            </div>
+                        </div>
+
+                        <!-- Input 3: Gross Profit Margin (%) -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="margin-input" class="text-xs font-medium text-gray-300">Gross Profit Margin</label>
+                                <div class="flex items-center gap-1 bg-navy-900/60 px-2 py-1 rounded border border-white/10">
+                                    <input type="number" id="margin-input" step="0.1" min="1" max="100" class="glass-input text-xs font-bold rounded px-2 py-0.5 w-20 text-right" oninput="syncFromNumber('margin')">
+                                    <span class="text-xs text-gray-400">%</span>
+                                </div>
+                            </div>
+                            <input type="range" id="margin-slider" min="10" max="95" step="0.5" class="w-full" oninput="syncFromSlider('margin')">
+                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                                <span>10%</span>
+                                <span>95%</span>
+                            </div>
+                        </div>
+
+                        <!-- Input 4: Monthly Retention Rate (%) -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="retention-input" class="text-xs font-medium text-gray-300">Monthly Retention Rate</label>
+                                <div class="flex items-center gap-1 bg-navy-900/60 px-2 py-1 rounded border border-white/10">
+                                    <input type="number" id="retention-input" step="0.01" min="50" max="99.9" class="glass-input text-xs font-bold rounded px-2 py-0.5 w-20 text-right" oninput="syncFromNumber('retention')">
+                                    <span class="text-xs text-gray-400">%</span>
+                                </div>
+                            </div>
+                            <input type="range" id="retention-slider" min="60" max="99" step="0.1" class="w-full" oninput="syncFromSlider('retention')">
+                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                                <span>60% (Churn 40%)</span>
+                                <span>99% (Churn 1%)</span>
+                            </div>
+                        </div>
+
+                        <!-- Input 5: Customer Acquisition Cost (CAC) -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="cac-input" class="text-xs font-medium text-gray-300">Customer Acquisition Cost (CAC)</label>
+                                <div class="flex items-center gap-1 bg-navy-900/60 px-2 py-1 rounded border border-white/10">
+                                    <span class="text-xs text-gray-400">$</span>
+                                    <input type="number" id="cac-input" step="0.1" min="1" max="5000" class="glass-input text-xs font-bold rounded px-2 py-0.5 w-20 text-right" oninput="syncFromNumber('cac')">
+                                </div>
+                            </div>
+                            <input type="range" id="cac-slider" min="10" max="1500" step="5" class="w-full" oninput="syncFromSlider('cac')">
+                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                                <span>$10</span>
+                                <span>$1,500</span>
+                            </div>
+                        </div>
+
+                        <!-- Input 6: Monthly Discount Rate (%) -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="discount-input" class="text-xs font-medium text-gray-300">Monthly Capital Discount Rate</label>
+                                <div class="flex items-center gap-1 bg-navy-900/60 px-2 py-1 rounded border border-white/10">
+                                    <input type="number" id="discount-input" step="0.01" min="0" max="10" class="glass-input text-xs font-bold rounded px-2 py-0.5 w-20 text-right" oninput="syncFromNumber('discount')">
+                                    <span class="text-xs text-gray-400">%</span>
+                                </div>
+                            </div>
+                            <input type="range" id="discount-slider" min="0" max="5" step="0.05" class="w-full" oninput="syncFromSlider('discount')">
+                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                                <span>0%</span>
+                                <span>5% (Cost of Capital)</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Financial Outputs Grid (7 Cols) -->
+            <div class="lg:col-span-7 flex flex-col justify-between space-y-6">
+
+                <!-- Primary KPI Metrics Display -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    
+                    <!-- LTV:CAC Ratio Card -->
+                    <div class="glass-card rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">LTV : CAC Ratio</span>
+                            <div class="p-2 rounded-lg bg-cyan-accent/10 text-cyan-accent">
+                                <i class="fa-solid fa-scale-balanced"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div id="ltv-cac-value" class="text-3xl font-extrabold text-white tracking-tight">--</div>
+                            <div id="ltv-cac-delta" class="text-xs mt-1 font-semibold flex items-center gap-1 hidden">
+                                <span>--</span> vs pinned baseline
+                            </div>
+                        </div>
+                        <div class="mt-3 w-full bg-navy-900/80 rounded-full h-1.5 overflow-hidden">
+                            <div id="ltv-cac-progress" class="bg-cyan-accent h-full w-0 transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Payback Period Card -->
+                    <div class="glass-card rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Payback Period</span>
+                            <div class="p-2 rounded-lg bg-cyan-accent/10 text-cyan-accent">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-baseline gap-1">
+                                <div id="payback-value" class="text-3xl font-extrabold text-white tracking-tight">--</div>
+                                <span class="text-xs text-gray-400">Mo</span>
+                            </div>
+                            <div id="payback-delta" class="text-xs mt-1 font-semibold flex items-center gap-1 hidden">
+                                <span>--</span> vs pinned baseline
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-2">Breakeven on acquisition</p>
+                    </div>
+
+                    <!-- Net LTV Card -->
+                    <div class="glass-card rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Gross Lifetime Value</span>
+                            <div class="p-2 rounded-lg bg-cyan-accent/10 text-cyan-accent">
+                                <i class="fa-solid fa-gem"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div id="ltv-value" class="text-3xl font-extrabold text-white tracking-tight">--</div>
+                            <div id="ltv-delta" class="text-xs mt-1 font-semibold flex items-center gap-1 hidden">
+                                <span>--</span> vs pinned baseline
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-2">Discounted gross margin LTV</p>
+                    </div>
+
+                    <!-- Annual Customer Value Card -->
+                    <div class="glass-card rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Annual Value</span>
+                            <div class="p-2 rounded-lg bg-navy-900 text-cyan-glow">
+                                <i class="fa-solid fa-calendar-check"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div id="annual-val" class="text-2xl font-bold text-white">--</div>
+                            <p class="text-[10px] text-gray-400 mt-1">AOV × Frequency/Yr</p>
+                        </div>
+                    </div>
+
+                    <!-- Customer Lifespan Card -->
+                    <div class="glass-card rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Lifespan</span>
+                            <div class="p-2 rounded-lg bg-navy-900 text-cyan-glow">
+                                <i class="fa-solid fa-user-clock"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-baseline gap-1">
+                                <div id="lifespan-val" class="text-2xl font-bold text-white">--</div>
+                                <span class="text-xs text-gray-400">Mo</span>
+                            </div>
+                            <p id="churn-subtext" class="text-[10px] text-gray-400 mt-1">Based on retention rate</p>
+                        </div>
+                    </div>
+
+                    <!-- 36-Month Net Profit Card -->
+                    <div class="glass-card rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">36-Mo Net Profit</span>
+                            <div class="p-2 rounded-lg bg-navy-900 text-cyan-glow">
+                                <i class="fa-solid fa-sack-dollar"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div id="net-profit-36" class="text-2xl font-bold text-white">--</div>
+                            <p class="text-[10px] text-gray-400 mt-1">Cum. Contribution - CAC</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- LTV vs CAC Comparison Bar Chart -->
+                <div class="glass-card rounded-2xl p-6 flex-grow flex flex-col justify-between min-h-[200px]">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-chart-bar text-cyan-accent"></i> Capital Efficiency Breakdown (LTV vs CAC)
+                        </h3>
+                        <div class="text-xs text-cyan-glow font-mono" id="ltv-margin-percent">
+                            -- Net Margin
+                        </div>
+                    </div>
+                    <div class="h-32 w-full relative">
+                        <canvas id="ltvCacBarChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Bottom Section: 36-Month Cumulative Cash Flow / Payback Timeline Chart -->
+        <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-timeline text-cyan-accent"></i> 36-Month Cumulative Cash Flow & Payback Timeline
+                    </h3>
+                    <p class="text-xs text-gray-400">Visualizing customer acquisition cost payback trajectory over a 3-year lifespan</p>
+                </div>
+                <div class="flex items-center gap-4 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-cyan-accent inline-block"></span>
+                        <span class="text-gray-300">Cumulative Net Profit ($)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-0.5 bg-red-400 inline-block"></span>
+                        <span class="text-gray-400">CAC Payback Line ($0)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="h-72 w-full relative">
+                <canvas id="paybackTimelineChart"></canvas>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 bg-navy-900/50 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-gray-500 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <p>LTV:CAC & Payback Period Forecaster • Single-File Interactive Dashboard</p>
+            <p class="flex items-center gap-1">
+                <span>Built for SaaS & E-Commerce Unit Economics</span>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Logic & Calculations JS -->
+    <script>
+        // State variables
+        let pinnedBaseline = null;
+
+        // Default Model State
+        const state = {
+            aov: 85.00,
+            freq: 4.5,
+            margin: 65.0,
+            retention: 92.50,
+            cac: 120.00,
+            discount: 0.83 // ~10% annual discount rate / 12 months
+        };
+
+        // Chart References
+        let paybackTimelineChart = null;
+        let ltvCacBarChart = null;
+
+        // On Load Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeInputFields();
+            initCharts();
+            calculateAndRender();
+        });
+
+        // Initialize Input Text Boxes and Sliders from State
+        function initializeInputFields() {
+            Object.keys(state).forEach(key => {
+                const numInput = document.getElementById(`${key}-input`);
+                const sliderInput = document.getElementById(`${key}-slider`);
+                if (numInput && sliderInput) {
+                    numInput.value = state[key];
+                    sliderInput.value = state[key];
+                }
+            });
+        }
+
+        // Sync Handlers
+        function syncFromSlider(key) {
+            const slider = document.getElementById(`${key}-slider`);
+            const input = document.getElementById(`${key}-input`);
+            state[key] = parseFloat(slider.value);
+            input.value = slider.value;
+            calculateAndRender();
+        }
+
+        function syncFromNumber(key) {
+            const slider = document.getElementById(`${key}-slider`);
+            const input = document.getElementById(`${key}-input`);
+            let val = parseFloat(input.value);
+            if (isNaN(val)) return;
+            state[key] = val;
+            slider.value = val;
+            calculateAndRender();
+        }
+
+        function resetDefaults() {
+            state.aov = 85.00;
+            state.freq = 4.5;
+            state.margin = 65.0;
+            state.retention = 92.50;
+            state.cac = 120.00;
+            state.discount = 0.83;
+            initializeInputFields();
+            pinnedBaseline = null;
+            document.getElementById('pin-btn-text').innerText = "Pin Baseline Scenario";
+            document.getElementById('pin-baseline-btn').classList.remove('bg-cyan-accent', 'text-navy-900');
+            document.getElementById('pin-baseline-btn').classList.add('bg-navy-800', 'text-cyan-accent');
+            calculateAndRender();
+        }
+
+        // Toggle Baseline Pinning
+        function togglePinBaseline() {
+            const btn = document.getElementById('pin-baseline-btn');
+            const btnText = document.getElementById('pin-btn-text');
+
+            if (pinnedBaseline === null) {
+                // Pin current state & calculated results
+                pinnedBaseline = { ...calculateCoreMetrics() };
+                btnText.innerText = "Unpin Baseline";
+                btn.classList.remove('bg-navy-800', 'text-cyan-accent');
+                btn.classList.add('bg-cyan-accent', 'text-navy-900');
+            } else {
+                // Unpin
+                pinnedBaseline = null;
+                btnText.innerText = "Pin Baseline Scenario";
+                btn.classList.remove('bg-cyan-accent', 'text-navy-900');
+                btn.classList.add('bg-navy-800', 'text-cyan-accent');
+            }
+            calculateAndRender();
+        }
+
+        // Core Financial Math Engine
+        function calculateCoreMetrics() {
+            const { aov, freq, margin, retention, cac, discount } = state;
+
+            // Monthly churn rate
+            const monthlyRetentionFrac = Math.min(Math.max(retention / 100, 0.001), 0.9999);
+            const monthlyChurnFrac = 1 - monthlyRetentionFrac;
+            const customerLifespanMonths = 1 / monthlyChurnFrac;
+
+            // Annual & Monthly Order Gross Profit
+            const annualCustomerValue = aov * freq;
+            const monthlyGrossMarginDecimal = margin / 100;
+            const monthlyDiscountDecimal = discount / 100;
+
+            // Monthly Average Gross Margin Contribution per customer
+            const monthlyGrossContribution = (annualCustomerValue * monthlyGrossMarginDecimal) / 12;
+
+            // Discounted LTV Calculation using continuous discounting sum formula:
+            // LTV = Sum_t=1..N [ Contribution * (Retention)^t / (1 + discount)^t ]
+            let ltv = 0;
+            let cumulativeCashFlow = [-cac]; // Month 0 start with CAC cost
+            let currentCumulative = -cac;
+            let exactPaybackMonth = null;
+
+            for (let m = 1; m <= 36; m++) {
+                const retentionProb = Math.pow(monthlyRetentionFrac, m - 1);
+                const discountFactor = Math.pow(1 + monthlyDiscountDecimal, m);
+                const monthContribution = (monthlyGrossContribution * retentionProb) / discountFactor;
+
+                ltv += monthContribution;
+                currentCumulative += monthContribution;
+                cumulativeCashFlow.push(currentCumulative);
+
+                // Exact linear interpolation for payback period
+                if (exactPaybackMonth === null && currentCumulative >= 0) {
+                    const prevCumulative = cumulativeCashFlow[m - 1];
+                    const monthGain = currentCumulative - prevCumulative;
+                    const fractionToBreakeven = (0 - prevCumulative) / monthGain;
+                    exactPaybackMonth = (m - 1) + fractionToBreakeven;
+                }
+            }
+
+            // Fallback for full discounted continuous LTV horizon if lifetime > 36 months
+            const effectiveMonthlyDiscount = monthlyChurnFrac + monthlyDiscountDecimal;
+            const totalDiscountedLTV = monthlyGrossContribution / effectiveMonthlyDiscount;
+
+            const ltvCacRatio = totalDiscountedLTV / cac;
+            const paybackMonths = exactPaybackMonth !== null ? exactPaybackMonth : (cac / monthlyGrossContribution);
+            const netProfit36 = cumulativeCashFlow[36];
+
+            return {
+                annualCustomerValue,
+                customerLifespanMonths,
+                monthlyGrossContribution,
+                ltv: totalDiscountedLTV,
+                ltvCacRatio,
+                paybackMonths,
+                netProfit36,
+                cumulativeCashFlow,
+                cac
+            };
+        }
+
+        // Main Calculation and UI Render Function
+        function calculateAndRender() {
+            const metrics = calculateCoreMetrics();
+
+            // Update Primary Cards
+            document.getElementById('ltv-cac-value').innerText = `${metrics.ltvCacRatio.toFixed(2)}x`;
+            document.getElementById('payback-value').innerText = metrics.paybackMonths.toFixed(1);
+            document.getElementById('ltv-value').innerText = `$${Math.round(metrics.ltv).toLocaleString()}`;
+            document.getElementById('annual-val').innerText = `$${Math.round(metrics.annualCustomerValue).toLocaleString()}`;
+            document.getElementById('lifespan-val').innerText = metrics.customerLifespanMonths.toFixed(1);
+            document.getElementById('churn-subtext').innerText = `${(100 - state.retention).toFixed(2)}% Monthly Churn`;
+            document.getElementById('net-profit-36').innerText = `${metrics.netProfit36 >= 0 ? '+' : ''}$${Math.round(metrics.netProfit36).toLocaleString()}`;
+
+            // Progress bar visual for LTV:CAC
+            const progressPercent = Math.min(Math.max((metrics.ltvCacRatio / 5) * 100, 5), 100);
+            document.getElementById('ltv-cac-progress').style.width = `${progressPercent}%`;
+
+            // Comparison Deltas if Pinned
+            renderDeltas(metrics);
+
+            // Render Heuristic Automated Alerts
+            renderHeuristics(metrics);
+
+            // Render Bar Summary & Timeline Charts
+            updateCharts(metrics);
+        }
+
+        // Render Deltas against Pinned Baseline
+        function renderDeltas(current) {
+            const deltaLtvCac = document.getElementById('ltv-cac-delta');
+            const deltaPayback = document.getElementById('payback-delta');
+            const deltaLtv = document.getElementById('ltv-delta');
+
+            if (!pinnedBaseline) {
+                deltaLtvCac.classList.add('hidden');
+                deltaPayback.classList.add('hidden');
+                deltaLtv.classList.add('hidden');
+                return;
+            }
+
+            // Show Deltas
+            deltaLtvCac.classList.remove('hidden');
+            deltaPayback.classList.remove('hidden');
+            deltaLtv.classList.remove('hidden');
+
+            // 1. LTV:CAC Delta
+            const diffRatio = current.ltvCacRatio - pinnedBaseline.ltvCacRatio;
+            deltaLtvCac.className = `text-xs mt-1 font-semibold flex items-center gap-1 ${diffRatio >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+            deltaLtvCac.innerHTML = `<i class="fa-solid fa-${diffRatio >= 0 ? 'caret-up' : 'caret-down'}"></i> ${diffRatio >= 0 ? '+' : ''}${diffRatio.toFixed(2)}x vs pinned baseline`;
+
+            // 2. Payback Delta (Lower is better)
+            const diffPayback = current.paybackMonths - pinnedBaseline.paybackMonths;
+            deltaPayback.className = `text-xs mt-1 font-semibold flex items-center gap-1 ${diffPayback <= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+            deltaPayback.innerHTML = `<i class="fa-solid fa-${diffPayback <= 0 ? 'caret-down' : 'caret-up'}"></i> ${diffPayback >= 0 ? '+' : ''}${diffPayback.toFixed(1)} mo vs pinned baseline`;
+
+            // 3. LTV Delta
+            const diffLtv = current.ltv - pinnedBaseline.ltv;
+            deltaLtv.className = `text-xs mt-1 font-semibold flex items-center gap-1 ${diffLtv >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+            deltaLtv.innerHTML = `<i class="fa-solid fa-${diffLtv >= 0 ? 'caret-up' : 'caret-down'}"></i> ${diffLtv >= 0 ? '+' : ''}$${Math.round(diffLtv).toLocaleString()} vs pinned baseline`;
+        }
+
+        // Dynamic Heuristics Flags
+        function renderHeuristics(metrics) {
+            const container = document.getElementById('heuristics-container');
+            container.innerHTML = '';
+
+            const cards = [];
+
+            // Flag 1: LTV:CAC Ratio Health
+            if (metrics.ltvCacRatio >= 4.0) {
+                cards.push({
+                    type: 'success',
+                    icon: 'fa-circle-check',
+                    title: 'Excellent Capital Efficiency',
+                    desc: `LTV:CAC is strong at ${metrics.ltvCacRatio.toFixed(1)}x. You have aggressive room to scale paid marketing acquisition.`
+                });
+            } else if (metrics.ltvCacRatio >= 3.0) {
+                cards.push({
+                    type: 'info',
+                    icon: 'fa-thumbs-up',
+                    title: 'Healthy Unit Economics',
+                    desc: `LTV:CAC is inside the ideal venture threshold (3.0x - 4.0x target).`
+                });
+            } else {
+                cards.push({
+                    type: 'warning',
+                    icon: 'fa-triangle-exclamation',
+                    title: 'Sub-Optimal LTV:CAC Ratio',
+                    desc: `LTV:CAC (${metrics.ltvCacRatio.toFixed(1)}x) is below the 3.0x benchmark. Reduce CAC or boost retention.`
+                });
+            }
+
+            // Flag 2: Payback Period Health
+            if (metrics.paybackMonths <= 12) {
+                cards.push({
+                    type: 'success',
+                    icon: 'fa-bolt',
+                    title: 'Rapid Cash Recovery',
+                    desc: `CAC payback in ${metrics.paybackMonths.toFixed(1)} months allows fast capital reinvestment cycles.`
+                });
+            } else if (metrics.paybackMonths <= 18) {
+                cards.push({
+                    type: 'info',
+                    icon: 'fa-clock',
+                    title: 'Moderate Payback Window',
+                    desc: `Payback is ${metrics.paybackMonths.toFixed(1)} months. Monitor working capital constraints.`
+                });
+            } else {
+                cards.push({
+                    type: 'danger',
+                    icon: 'fa-circle-exclamation',
+                    title: 'Extended Payback Risk',
+                    desc: `Payback exceeds 18 months (${metrics.paybackMonths.toFixed(1)} mo). High reliance on outside funding.`
+                });
+            }
+
+            // Flag 3: Retention Quality
+            if (state.retention >= 95) {
+                cards.push({
+                    type: 'success',
+                    icon: 'fa-infinity',
+                    title: 'Top-Tier Retention Engine',
+                    desc: `${state.retention}% monthly retention translates to a ${metrics.customerLifespanMonths.toFixed(0)}-month average lifespan.`
+                });
+            } else if (state.retention >= 88) {
+                cards.push({
+                    type: 'info',
+                    icon: 'fa-user-check',
+                    title: 'Solid Retention Profile',
+                    desc: `Customer lifespan averages ${metrics.customerLifespanMonths.toFixed(1)} months with ${(100-state.retention).toFixed(1)}% monthly churn.`
+                });
+            } else {
+                cards.push({
+                    type: 'warning',
+                    icon: 'fa-user-minus',
+                    title: 'High Leaky Bucket Churn',
+                    desc: `${(100-state.retention).toFixed(1)}% monthly churn caps customer lifespan to ${metrics.customerLifespanMonths.toFixed(1)} months.`
+                });
+            }
+
+            // Build DOM Cards
+            cards.forEach(card => {
+                let borderClass = 'border-cyan-glow/20 bg-navy-800/60';
+                let iconColor = 'text-cyan-accent';
+
+                if (card.type === 'success') {
+                    borderClass = 'border-emerald-500/30 bg-emerald-950/20';
+                    iconColor = 'text-emerald-400';
+                } else if (card.type === 'warning') {
+                    borderClass = 'border-amber-500/30 bg-amber-950/20';
+                    iconColor = 'text-amber-400';
+                } else if (card.type === 'danger') {
+                    borderClass = 'border-rose-500/30 bg-rose-950/20';
+                    iconColor = 'text-rose-400';
+                }
+
+                container.innerHTML += `
+                    <div class="glass-card rounded-xl p-4 border ${borderClass} flex items-start gap-3">
+                        <i class="fa-solid ${card.icon} ${iconColor} text-lg mt-0.5"></i>
+                        <div>
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">${card.title}</h4>
+                            <p class="text-xs text-gray-300 mt-0.5 leading-relaxed">${card.desc}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // Initialize Chart.js
+        function initCharts() {
+            // 1. Payback Timeline Chart
+            const ctxTimeline = document.getElementById('paybackTimelineChart').getContext('2d');
+            paybackTimelineChart = new Chart(ctxTimeline, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 37}, (_, i) => mLabel(i)),
+                    datasets: [
+                        {
+                            label: 'Cumulative Cash Flow ($)',
+                            data: [],
+                            borderColor: '#00f5d4',
+                            backgroundColor: 'rgba(0, 245, 212, 0.08)',
+                            fill: true,
+                            borderWidth: 2.5,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: '#00f5d4',
+                            pointHoverBorderColor: '#0b132b',
+                            pointHoverBorderWidth: 2
+                        },
+                        {
+                            label: 'Breakeven Line ($0)',
+                            data: Array(37).fill(0),
+                            borderColor: '#f87171',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1c2541',
+                            titleColor: '#00f5d4',
+                            bodyColor: '#f1f5f9',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: (context) => {
+                                    if (context.datasetIndex === 1) return null;
+                                    const val = context.raw;
+                                    return `Cumulative Net: ${val >= 0 ? '+' : ''}$${Math.round(val).toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { 
+                                color: '#94a3b8',
+                                font: { size: 10 },
+                                callback: (val) => `$${val}`
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. Bar Breakdown Chart (CAC vs LTV Profit Margin)
+            const ctxBar = document.getElementById('ltvCacBarChart').getContext('2d');
+            ltvCacBarChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: ['Acquisition Cost vs Value'],
+                    datasets: [
+                        {
+                            label: 'CAC Investment',
+                            data: [0],
+                            backgroundColor: '#f87171',
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Net Discounted LTV Profit',
+                            data: [0],
+                            backgroundColor: '#00f5d4',
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1c2541',
+                            titleColor: '#00f5d4',
+                            bodyColor: '#f1f5f9',
+                            callbacks: {
+                                label: (ctx) => `${ctx.dataset.label}: $${Math.round(ctx.raw).toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#94a3b8', font: { size: 10 }, callback: (val) => `$${val}` }
+                        },
+                        y: {
+                            stacked: true,
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Format month label
+        function mLabel(i) {
+            if (i === 0) return 'Start';
+            if (i % 6 === 0 || i === 12 || i === 24 || i === 36) return `M${i}`;
+            return '';
+        }
+
+        // Update Charts with New Calculated Data
+        function updateCharts(metrics) {
+            if (!paybackTimelineChart || !ltvCacBarChart) return;
+
+            // 1. Update Timeline
+            paybackTimelineChart.data.datasets[0].data = metrics.cumulativeCashFlow;
+            paybackTimelineChart.update();
+
+            // 2. Update LTV vs CAC Bar Stack
+            const netLtvMargin = Math.max(0, metrics.ltv - metrics.cac);
+            ltvCacBarChart.data.datasets[0].data = [metrics.cac];
+            ltvCacBarChart.data.datasets[1].data = [netLtvMargin];
+            ltvCacBarChart.update();
+
+            // Margin percent readout text
+            const marginPercent = ((netLtvMargin / metrics.ltv) * 100).toFixed(1);
+            document.getElementById('ltv-margin-percent').innerText = `${marginPercent}% Pure LTV Profit Margin`;
+        }
+    </script>
+</body>
+</html>
